@@ -3,6 +3,7 @@ package com.dykt.installerultra
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -14,6 +15,8 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import com.rosan.dhizuku.api.Dhizuku
+import com.rosan.dhizuku.api.DhizukuRequestPermissionListener
 import java.io.File
 
 class MainActivity : Activity() {
@@ -34,7 +37,7 @@ class MainActivity : Activity() {
         scroll.addView(layout)
 
         val title = TextView(this).apply {
-            text = "Installer Ultra V1.1.2"
+            text = "Installer Ultra V1.2.0"
             textSize = 26f
             setPadding(0, 0, 0, 40)
         }
@@ -47,44 +50,38 @@ class MainActivity : Activity() {
         }
         layout.addView(pathText)
 
-        // 1. 自定义文件浏览器
         val pickBtn = Button(this).apply {
             text = "浏览 APK 文件"
             setOnClickListener { showFileBrowser() }
         }
         layout.addView(pickBtn)
 
-        // 2. 安装后是否打开
         openCheck = CheckBox(this).apply {
             text = "安装后自动打开"
             isChecked = true
         }
         layout.addView(openCheck)
 
-        // 3. 静默安装
         val installBtn = Button(this).apply {
             text = "静默安装（广播）"
             setOnClickListener { silentInstall() }
         }
         layout.addView(installBtn)
 
-        // 4. 开启开发者选项
+        val dhizukuBtn = Button(this).apply {
+            text = "请求 Dhizuku 授权"
+            setOnClickListener { requestDhizuku() }
+        }
+        layout.addView(dhizukuBtn)
+
         val devBtn = Button(this).apply {
             text = "开启开发者选项"
             setOnClickListener {
                 sendBroadcast(Intent("COM.HRA.DEVELOPMENT"))
                 statusText.text = "已发送开发者选项广播"
-                Toast.makeText(this@MainActivity, "已发送", Toast.LENGTH_SHORT).show()
             }
         }
         layout.addView(devBtn)
-
-        // 5. 打开系统安装器（备用方案）
-        val sysBtn = Button(this).apply {
-            text = "打开系统安装器安装"
-            setOnClickListener { installWithSystem() }
-        }
-        layout.addView(sysBtn)
 
         statusText = TextView(this).apply {
             textSize = 13f
@@ -95,24 +92,63 @@ class MainActivity : Activity() {
 
         setContentView(scroll)
 
-        // 申请所有文件访问权限（Android 11+）
+        initDhizuku()
         requestAllFilesAccess()
     }
 
-    // ========== 权限引导 ==========
+    private fun initDhizuku() {
+        if (Dhizuku.init(this)) {
+            statusText.text = "Dhizuku 已连接"
+        } else {
+            statusText.text = "Dhizuku 未激活或不可用"
+        }
+    }
+
+    private fun requestDhizuku() {
+        if (!Dhizuku.init(this)) {
+            statusText.text = "Dhizuku 不可用"
+            return
+        }
+        if (Dhizuku.isPermissionGranted()) {
+            statusText.text = "Dhizuku 已授权"
+            return
+        }
+        // 只调用公开的 requestPermission(listener)
+        val listener = object : DhizukuRequestPermissionListener() {
+            override fun onRequestPermission(grantResult: Int) {
+                runOnUiThread {
+                    if (grantResult == PackageManager.PERMISSION_GRANTED) {
+                        statusText.text = "Dhizuku 授权成功"
+                    } else {
+                        statusText.text = "Dhizuku 授权被拒绝"
+                    }
+                }
+            }
+        }
+        Dhizuku.requestPermission(listener)
+        statusText.text = "已请求 Dhizuku 授权"
+    }
+
     private fun requestAllFilesAccess() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!Environment.isExternalStorageManager()) {
                 Toast.makeText(this, "请授予“所有文件访问权限”", Toast.LENGTH_LONG).show()
-                startActivity(Intent(
-                    Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                    Uri.parse("package:$packageName")
-                ))
+                try {
+                    startActivity(Intent(
+                        Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                        Uri.parse("package:$packageName")
+                    ))
+                } catch (e: Exception) {
+                    try {
+                        startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                    } catch (e2: Exception) {
+                        Toast.makeText(this, "请手动去设置开启权限", Toast.LENGTH_LONG).show()
+                    }
+                }
             }
         }
     }
 
-    // ========== 自定义文件浏览器 ==========
     private fun showFileBrowser() {
         browseDirectory(Environment.getExternalStorageDirectory())
     }
@@ -149,7 +185,6 @@ class MainActivity : Activity() {
             .show()
     }
 
-    // ========== 静默安装（广播） ==========
     private fun silentInstall() {
         val path = selectedPath
         if (path == null) {
@@ -165,24 +200,5 @@ class MainActivity : Activity() {
 
         statusText.text = "已发送安装广播\n路径：$path\n自动打开：${openCheck.isChecked}"
         Toast.makeText(this, "安装广播已发送", Toast.LENGTH_SHORT).show()
-    }
-
-    // ========== 用系统安装器安装（备用） ==========
-    private fun installWithSystem() {
-        val path = selectedPath
-        if (path == null) {
-            Toast.makeText(this, "请先选择 APK 文件", Toast.LENGTH_SHORT).show()
-            return
-        }
-        try {
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(Uri.fromFile(File(path)), "application/vnd.android.package-archive")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            startActivity(intent)
-        } catch (e: Exception) {
-            statusText.text = "系统安装器不可用：${e.message}"
-            Toast.makeText(this, "系统安装器不可用", Toast.LENGTH_SHORT).show()
-        }
     }
 }
