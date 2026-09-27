@@ -6,9 +6,17 @@
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- Dhizuku 权限声明 -->
+    <uses-permission android:name="com.rosan.dhizuku.permission.API" />
+
     <application
         android:label="Installer Ultra"
         android:theme="@android:style/Theme.Material.NoActionBar">
+
+        <!-- Dhizuku API 标记 -->
+        <meta-data
+            android:name="com.rosan.dhizuku.api"
+            android:value="true" />
 
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
