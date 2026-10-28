@@ -1,0 +1,6 @@
+cmdline-tools.zip
+.gradle/
+build/
+app/build/
+local.properties
+.idea/
